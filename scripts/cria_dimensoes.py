@@ -128,9 +128,9 @@ def criar_dimensao_tempo(ano_inicio, ano_fim):
     dim_tempo = pd.DataFrame({'data_completa': datas})
 
     # 2. Extrair atributos de data civil (Ano, Mês, Dia)
-    dim_tempo['ano_civil'] = dim_tempo['data_completa'].dt.year
-    dim_tempo['mes_civil'] = dim_tempo['data_completa'].dt.month
-    dim_tempo['dia_civil'] = dim_tempo['data_completa'].dt.day
+    dim_tempo['ano'] = dim_tempo['data_completa'].dt.year
+    dim_tempo['mes'] = dim_tempo['data_completa'].dt.month
+    dim_tempo['dia'] = dim_tempo['data_completa'].dt.day
 
     # 3. Calcular atributos epidemiológicos (Ano e Semana)
     # A lógica lida com a "semana 0" (dias no início de janeiro
@@ -143,8 +143,8 @@ def criar_dimensao_tempo(ano_inicio, ano_fim):
     # Ano Epidemiológico: Se for semana 0, pertence ao ano anterior
     dim_tempo['ano_epidemiologico'] = np.where(
         eh_semana_zero,
-        dim_tempo['ano_civil'] - 1,  # Verdadeiro: Ano anterior
-        dim_tempo['ano_civil']       # Falso: Ano atual
+        dim_tempo['ano'] - 1,  # Verdadeiro: Ano anterior
+        dim_tempo['ano']       # Falso: Ano atual
     )
 
     # Semana Epidemiológica:
@@ -164,7 +164,7 @@ def criar_dimensao_tempo(ano_inicio, ano_fim):
 
     # 5. Reordenar colunas para o schema final
     colunas_ordenadas = [
-        'id_tempo', 'data_completa', 'ano_civil', 'mes_civil', 'dia_civil',
+        'id_tempo', 'data_completa', 'ano', 'mes', 'dia',
         'ano_epidemiologico', 'semana_epidemiologica'
     ]
     dim_tempo = dim_tempo[colunas_ordenadas]
