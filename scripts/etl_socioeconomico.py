@@ -36,7 +36,7 @@ CAMINHOS_ETL = {
     'bruto_snis': os.path.join(PATH_BRUTOS, 'br_mdr_snis_municipio_agua_esgoto.csv'),
     'dim_local': os.path.join(PATH_PROCESSADOS, 'dim_local.csv'),
     'dim_tempo': os.path.join(PATH_PROCESSADOS, 'dim_tempo.csv'),
-    'saida_fato_csv': os.path.join(PATH_PROCESSADOS, 'fato_socioeconomico_tratado.csv')
+    'saida_fato_csv': os.path.join(PATH_PROCESSADOS, 'fato_socioeconomico.csv')
 }
 
 # --- Definições de Schema para Extração ---
@@ -66,16 +66,17 @@ REGRA_TEMPO_ANUAL = {
 
 # Mapeamento final dos nomes das colunas da tabela Fato
 COLUNAS_FATO_RENAME_MAP = {
-    'id_local': 'ID_Local(FK)',
-    'id_tempo': 'ID_tempo(FK)',
-    'populacao_urbana': 'Num_populacao',
-    'populacao_atentida_esgoto': 'Num_Esgoto',
-    'populacao_atendida_agua': 'Num_agua Tratada'
+    'id_local': 'id_local',
+    'id_tempo': 'id_tempo',
+    'populacao_atendida_agua': 'num_agua_tratada',
+    'populacao_urbana': 'num_populacao',
+    'populacao_atentida_esgoto': 'num_esgoto'
+    
 }
 # Colunas finais que devem estar no CSV
 COLUNAS_FATO_FINAL = [
-    'ID_Local(FK)', 'ID_tempo(FK)', 'Num_populacao', 
-    'Num_Esgoto', 'Num_agua Tratada'
+    'id_local', 'id_tempo', 'num_agua_tratada', 'num_populacao', 
+    'num_esgoto'
 ]
 
 # =============================================================================

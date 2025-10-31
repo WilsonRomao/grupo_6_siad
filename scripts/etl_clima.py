@@ -295,7 +295,7 @@ def agregar_dados_clima(df_limpo, dim_tempo, dim_local, metadata_local):
         temperatura_media=('temperatura_media', 'mean'),
         
         # Para a precipitação, calculamos a SOMA das somas diárias
-        precipitacao_soma=('precipitacao_total', 'sum')
+        precipitacao_total=('precipitacao_total', 'sum')
         
     ).reset_index()
 
@@ -306,7 +306,7 @@ def agregar_dados_clima(df_limpo, dim_tempo, dim_local, metadata_local):
     df_agregado_semanal['temperatura_media'] = df_agregado_semanal['temperatura_media'].round(2)
 
     # Seleciona e reordena as colunas finais para a Fato
-    colunas_fato_clima = ['id_tempo', 'id_local', 'temperatura_media', 'precipitacao_soma']
+    colunas_fato_clima = ['id_tempo', 'id_local', 'temperatura_media', 'precipitacao_total']
     
     return df_agregado_semanal[colunas_fato_clima]
 

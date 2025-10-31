@@ -92,7 +92,7 @@ AGG_RENAMING_MAP = {
     'flag_autoctones': 'num_autoctones',
     'flag_masculino': 'num_masculino',
     'flag_feminino': 'num_feminino',
-    'flag_criancas': 'num_crianças',
+    'flag_criancas': 'num_criancas',
     'flag_hospitalizacao': 'num_hospitalizacao',
     'flag_adolescentes': 'num_adolescentes',
     'flag_adultos': 'num_adultos',
@@ -123,65 +123,67 @@ def mount_google_drive():
 # ETAPA DE EXTRAÇÃO (EXTRACT)
 # =============================================================================
 
-def extrair_dados_brutos(file_pattern, cols_antigo, dtypes_antigo, cols_novo, dtypes_novo):
+def extrair_dados_brutos(file_pattern, cols_antigo, dtypes_antigo, cols_novo, dtypes_novo, codigos_filtro=None):
     """
-    Lê múltiplos arquivos CSV de dados brutos da dengue, lidando com
-    a mudança de schema (DT_NASC vs ANO_NASC).
-
-    Entrada:
-    - file_pattern (str): Padrão glob para encontrar os arquivos (ex: "DENGBR*.csv").
-    - cols_antigo, dtypes_antigo (list, dict): Schema para arquivos antigos.
-    - cols_novo, dtypes_novo (list, dict): Schema para arquivos novos.
-
-    Saída:
-    - (pd.DataFrame): DataFrame único contendo todos os dados concatenados.
+    (VERSÃO MELHORADA COM FILTRO DE MEMÓRIA E LOG)
     """
     print(f"Iniciando extração de arquivos: {file_pattern}")
     all_files = glob.glob(file_pattern)
-    all_data = []
-
-    for file in all_files:
-        try:
-            # 1. Tenta ler com o padrão ANTIGO (DT_NASC)
-            df = pd.read_csv(
-                file,
-                usecols=cols_antigo,
-                dtype=dtypes_antigo,
-                sep=','
-            )
-            all_data.append(df)
-
-        except ValueError as e:
-            # 2. Se falhar, verifica se é o erro esperado
-            if "DT_NASC" in str(e):
-                try:
-                    # 3. Tenta ler com o padrão NOVO (ANO_NASC)
-                    df = pd.read_csv(
-                        file,
-                        usecols=cols_novo,
-                        dtype=dtypes_novo,
-                        sep=','
-                    )
-                    # 4. Uniformiza a coluna para o padrão antigo
-                    df.rename(columns={'ANO_NASC': 'DT_NASC'}, inplace=True)
-                    all_data.append(df)
-                except Exception as e_novo:
-                    print(f"Erro INESPERADO ao tentar ler {file} (padrão novo): {e_novo}")
-            else:
-                # 5. Se o erro não foi 'DT_NASC', é outro problema
-                print(f"Erro ao ler o arquivo {file} (padrão antigo): {e}")
-        except Exception as e:
-            print(f"Erro genérico ao processar o arquivo {file}: {e}")
-
-    if not all_data:
-        print("Aviso: Nenhum dado foi extraído. Verifique o caminho e padrão.")
+    num_files = len(all_files)
+    
+    if num_files == 0:
+        print("Aviso: Nenhum arquivo encontrado.")
         return pd.DataFrame()
 
-    # Concatena todos os DataFrames da lista
+    if codigos_filtro is None:
+        print("Aviso: Nenhum filtro de códigos de município fornecido.")
+        codigos_filtro = [] # Define como lista vazia se não for passado
+
+    all_data = [] # Esta lista agora guardará DFs pequenos e filtrados
+
+    for i, file in enumerate(all_files):
+        file_name = os.path.basename(file)
+        print(f"  [{i+1}/{num_files}] Lendo: {file_name}")
+        df = None # Reseta o df
+
+        try:
+            # Tenta ler o padrão antigo...
+            df = pd.read_csv(file, usecols=cols_antigo, dtype=dtypes_antigo, sep=',')
+        except ValueError as e:
+            if "DT_NASC" in str(e):
+                try:
+                    # Tenta ler o padrão novo...
+                    df = pd.read_csv(file, usecols=cols_novo, dtype=dtypes_novo, sep=',')
+                    df.rename(columns={'ANO_NASC': 'DT_NASC'}, inplace=True)
+                except Exception as e_novo:
+                    print(f"  ERRO INESPERADO ao ler {file_name} (padrão novo): {e_novo}")
+            else:
+                print(f"  ERRO ao ler {file_name} (padrão antigo): {e}")
+        except Exception as e:
+            print(f"  ERRO genérico ao processar o arquivo {file_name}: {e}")
+
+        # --- MUDANÇA PRINCIPAL: FILTRAR AQUI ---
+        if df is not None:
+            # Filtra o DF antes de adicioná-lo à lista
+            df_filtrado = df[df['ID_MN_RESI'].isin(codigos_filtro)]
+            
+            if not df_filtrado.empty:
+                all_data.append(df_filtrado)
+            # Se o df_filtrado estiver vazio, ele é descartado e a memória é liberada.
+        # --- FIM DA MUDANÇA ---
+
+    if not all_data:
+        print("Aviso: Nenhum dado foi extraído (ou nenhum dado correspondeu ao filtro das capitais).")
+        return pd.DataFrame()
+
+    print(f"\nLeitura de {len(all_data)}/{num_files} ficheiros concluída (após filtro).")
+    print("A concatenar dados filtrados...")
+    
+    # Agora o concat é muito mais leve!
     dengueDF = pd.concat(all_data, ignore_index=True)
-    print(f"--- Leitura Concluída ---")
-    print(f"Total de {len(all_files)} arquivos lidos.")
-    print(f"Total de {len(dengueDF)} linhas concatenadas.")
+    
+    print(f"--- Leitura e Concatenação Concluídas ---")
+    print(f"Total de {len(dengueDF)} linhas concatenadas (apenas capitais).")
     return dengueDF
 
 
@@ -287,7 +289,6 @@ def _mapear_dimensoes(df, dim_local_clean, dim_tempo_clean):
         right_on='data_completa',
         how='left'
     )
-    df.rename(columns={'id_tempo': 'ID_tempo(FK)'}, inplace=True)
     
     # 2. Merge com Dim_Local
     df = df.merge(
@@ -296,11 +297,10 @@ def _mapear_dimensoes(df, dim_local_clean, dim_tempo_clean):
         right_on='cod_municipio_6dig',
         how='left'
     )
-    df.rename(columns={'id_local': 'ID_Local(FK)'}, inplace=True)
     
     # 3. Verificação
-    nulos_tempo = df['ID_tempo(FK)'].isnull().sum()
-    nulos_local = df['ID_Local(FK)'].isnull().sum()
+    nulos_tempo = df['id_tempo'].isnull().sum()
+    nulos_local = df['id_local'].isnull().sum()
     if nulos_tempo > 0:
         print(f"Aviso: {nulos_tempo} registros não encontraram ID_tempo.")
     if nulos_local > 0:
@@ -353,7 +353,7 @@ def _agregar_dados_fato(df, renaming_map):
     """
     print("Agregando dados (groupby)...")
     
-    chaves_agrupamento = ['ID_Local(FK)', 'ID_tempo(FK)']
+    chaves_agrupamento = ['id_local', 'id_tempo']
     
     # Filtra o DF para evitar agrupar linhas sem chave
     df_final = df.dropna(subset=chaves_agrupamento)
@@ -392,23 +392,21 @@ def pipeline_transformacao(raw_df, dim_local, dim_tempo, constants):
     # 1. Preparar Dimensões
     dim_local_clean = _preparar_dim_local(dim_local)
     dim_tempo_clean = _preparar_dim_tempo(dim_tempo)
+
+
+    # 2. Limpar Nulos
+    df_cleaned = _limpar_valores_nulos(raw_df, constants['FILLNA_MAP'])
     
-    # 2. Filtrar dados brutos
-    df_capitais = _filtrar_dados_capitais(raw_df, dim_local_clean)
-    
-    # 3. Limpar Nulos
-    df_cleaned = _limpar_valores_nulos(df_capitais, constants['FILLNA_MAP'])
-    
-    # 4. Tratar Datas e Calcular Idade
+    # 3. Tratar Datas e Calcular Idade
     df_with_age = _calcular_idade_e_ajustar_datas(df_cleaned)
     
-    # 5. Mapear Dimensões (Merge)
+    # 4. Mapear Dimensões (Merge)
     df_merged = _mapear_dimensoes(df_with_age, dim_local_clean, dim_tempo_clean)
     
-    # 6. Criar Flags (para contagem)
+    # 5. Criar Flags (para contagem)
     df_with_flags = _criar_flags_agregacao(df_merged, constants['AGG_CRITERIA'])
     
-    # 7. Agregar (Group By)
+    # 6. Agregar (Group By)
     fato_casos_dengue = _agregar_dados_fato(df_with_flags, constants['AGG_RENAMING_MAP'])
     
     print("--- TRANSFORMAÇÃO CONCLUÍDA ---")
@@ -449,28 +447,38 @@ def carregar_dados_processados(df, output_path):
 def main():
     """
     Função principal que orquestra todo o pipeline de ETL.
+    (VERSÃO MELHORADA COM FILTRO NA EXTRAÇÃO)
     """
     print("========= INICIANDO PIPELINE ETL DENGUE =========")
-    
-    # 0. Montar o Google Drive (apenas se estiver no Colab)
     mount_google_drive()
     
-    # 1. ETAPA DE EXTRAÇÃO
-    # Extrai os dados brutos da dengue
+    # --- MUDANÇA 1: Carregar Dimensões PRIMEIRO ---
+    print("A carregar dimensões para filtro prévio...")
+    try:
+        dim_local = carregar_dimensao(PATH_DIM_LOCAL)
+        dim_tempo = carregar_dimensao(PATH_DIM_TEMPO)
+    except Exception as e:
+        print(f"ERRO: Não foi possível carregar dimensões. Pipeline interrompido. {e}")
+        return
+
+    # --- MUDANÇA 2: Preparar os códigos de filtro ---
+    # Garante que a cópia está sendo modificada
+    df_local_clean = dim_local.copy()
+    # Chave 'cod_municipio' deve ter 6 dígitos (removendo o dígito verificador)
+    df_local_clean['cod_municipio_6dig'] = df_local_clean['cod_municipio'].astype(str).str[:-1]
+    codigos_capitais = df_local_clean['cod_municipio_6dig'].unique()
+
+    # 1. ETAPA DE EXTRAÇÃO (Agora com filtro)
     df_bruto = extrair_dados_brutos(
         PATH_BRUTOS,
         COLUNAS_ANTIGO, DTYPES_ANTIGO,
-        COLUNAS_NOVO, DTYPES_NOVO
+        COLUNAS_NOVO, DTYPES_NOVO,
+        codigos_capitais  # <-- Passamos os códigos para a função
     )
     
-    # Se a extração falhar ou não retornar dados, interrompe
     if df_bruto.empty:
         print("Pipeline interrompido: Nenhum dado bruto foi carregado.")
         return
-
-    # Carrega as dimensões
-    dim_local = carregar_dimensao(PATH_DIM_LOCAL)
-    dim_tempo = carregar_dimensao(PATH_DIM_TEMPO)
     
     # 2. ETAPA DE TRANSFORMAÇÃO
     # Junta todas as constantes de transformação em um dicionário

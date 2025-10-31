@@ -5,7 +5,7 @@ Script para Criação da Estrutura do DW (Passo 1).
 Este script lê o ficheiro 'create_dw.sql' e executa os comandos
 para criar todas as tabelas (Dimensões e Fatos) no Data Warehouse.
 
-Ele obtém as credenciais de forma segura do ficheiro 'config/mysql.yml'.
+Ele obtém as credenciais de forma segura do ficheiro 'config/db_config.yml'.
 
 Isto só precisa de ser executado UMA VEZ.
 """
@@ -45,7 +45,7 @@ def carregar_config_dw(path_yaml):
         string_conexao = (
             f"mysql+pymysql://{db_config['user']}:{db_config['password']}"
             f"@{db_config['host']}:{db_config['port']}"
-            f"/{db_config['database']}"
+            f"/"
         )
         print("Configuração do DW lida com sucesso.")
         return string_conexao
@@ -110,13 +110,7 @@ def executar_sql_no_dw(str_conexao, sql_commands):
         with engine.connect() as conexao:
             
             # 2. Executar comandos em loop, um de cada vez
-            for comando in comandos_individuais:
-                
-                # --- CORREÇÃO ---
-                # REMOVEMOS a lógica que ignorava o 'USE'.
-                # Agora, ele irá executar o 'USE dw_siad'
-                # e mudar o contexto do banco de dados.
-                
+            for comando in comandos_individuais:              
                 print(f"A executar: {comando[:60]}...") # Mostra os primeiros 60 chars
                 conexao.execute(text(comando))
             

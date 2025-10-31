@@ -215,7 +215,7 @@ def criar_dimensao_local(raw_file_path, lista_capitais, colunas_raw, mapa_ambigu
     - mapa_rename (dict): Dicionário para renomear colunas.
 
     Saída:
-    - (pd.DataFrame): DataFrame da dim_local (apenas capitais), pronto para ser salvo.
+    - DataFrame da dim_local (apenas capitais), pronto para ser salvo.
     """
     print(f"Iniciando criação da dim_local a partir de: {raw_file_path}")
     
@@ -237,7 +237,7 @@ def criar_dimensao_local(raw_file_path, lista_capitais, colunas_raw, mapa_ambigu
     df_filtrado = df_local[df_local['Nome_Município'].isin(lista_capitais)].copy()
     print(f"Arquivo IBGE filtrado, {len(df_filtrado)} linhas de capitais (incluindo homónimas).")
 
-    # 4. Segundo filtro (Robusto): Resolver ambiguidades
+    # 4. Segundo filtro: Resolver ambiguidades
     # Aplicamos a função _resolver_ambiguidade a cada linha
     df_filtrado['is_capital_real'] = df_filtrado.apply(
         _resolver_ambiguidade, 
@@ -250,7 +250,7 @@ def criar_dimensao_local(raw_file_path, lista_capitais, colunas_raw, mapa_ambigu
     
     # Verificação de segurança
     if len(df_final_capitais) != 27:
-        print(f"ATENÇÃO! Esperava 27 capitais, mas encontrei {len(df_final_capitais)}.")
+        print(f"ATENÇÃO! Esperava-se 27 capitais, mas {len(df_final_capitais) } foram encontradas.")
     else:
         print("Desambiguação concluída. 27 capitais únicas isoladas.")
 
@@ -276,7 +276,7 @@ def criar_dimensao_local(raw_file_path, lista_capitais, colunas_raw, mapa_ambigu
 
 def salvar_dimensao_csv(df, output_path):
     """
-    Função genérica para salvar um DataFrame de dimensão em um arquivo CSV.
+    Função para salvar um DataFrame de dimensão em um arquivo CSV.
 
     Entrada:
     - df (pd.DataFrame): A dimensão a ser salva.
