@@ -1,7 +1,3 @@
-Com base nos scripts que você forneceu, aqui está uma sugestão de `README.md` completo para o seu projeto. Este README explica o objetivo, a arquitetura, o modelo de dados e como executar o pipeline.
-
------
-
 # Projeto de Data Warehouse: Análise de Casos de Dengue
 
 Este projeto é um pipeline de ETL (Extract, Transform, Load) completo, projetado para coletar, processar e carregar dados de diversas fontes em um Data Warehouse (DW). O objetivo é centralizar informações sobre casos de dengue, clima e fatores socioeconômicos para permitir análises e a criação de dashboards.
