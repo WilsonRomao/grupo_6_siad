@@ -31,7 +31,7 @@ PATH_BRUTOS_LOCAL = os.path.join(PATH_BRUTOS, 'local')
 
 CAMINHOS_ETL = {
     # 3 Fontes de Fatos Brutos
-    'bruto_snis': os.path.join(PATH_BRUTOS, 'br_mdr_snis_municipio_agua_esgoto.csv'),
+    'bruto_snis': os.path.join(PATH_BRUTOS_LOCAL, 'br_mdr_snis_municipio_agua_esgoto.csv'),
     'bruto_populacao': os.path.join(PATH_BRUTOS_LOCAL, 'br_ibge_populacao_municipio.csv'),
     
     # 2 Dimensões
