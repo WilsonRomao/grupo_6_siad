@@ -24,8 +24,10 @@ PATH_PROCESSADOS = os.path.join(CAMINHO_BASE, 'processados')
 PATH_BRUTOS = os.path.join(CAMINHO_BASE, 'brutos')
 
 # Caminho de entrada do arquivo XLS do IBGE
+#Usamos o ficheiro de 2022 como fonte para os nomes e códigos das capitais
+
 PATH_BRUTOS_LOCAL = os.path.join(PATH_BRUTOS, 'local') 
-PATH_RAW_LOCAL = os.path.join(PATH_BRUTOS_LOCAL,'RELATORIO_DTB_BRASIL_2024_MUNICIPIOS.xls')
+PATH_FONTE_LOCAL = os.path.join(PATH_BRUTOS_LOCAL, 'AR_BR_RG_UF_RGINT_MES_MIC_MUN_2022.xls')
 
 # Caminhos de saída para as dimensões
 PATH_DIM_TEMPO_SAIDA = os.path.join(PATH_PROCESSADOS, 'dim_tempo.csv')
@@ -33,7 +35,7 @@ PATH_DIM_LOCAL_SAIDA = os.path.join(PATH_PROCESSADOS, 'dim_local.csv')
 
 # --- Configurações da Dim_Tempo ---
 ANO_INICIO = 2017
-ANO_FIM = 2022 # Ajustado para 2022 conforme o script
+ANO_FIM = 2022 
 
 # --- Configurações da Dim_Local ---
 # Lista das 27 capitais que queremos manter
@@ -48,16 +50,16 @@ LISTA_CAPITAIS = [
 
 # Colunas que queremos extrair do arquivo do IBGE
 COLUNAS_IBGE_RAW = [
-    'Nome_UF',
-    'Código Município Completo',
-    'Nome_Município'
+    'NM_UF',
+    'CD_MUN',
+    'NM_MUN'
 ]
 
 # Renomeia colunas para o padrão final do DW
 MAPA_RENOMEAR_LOCAL = {
-    'Nome_UF': 'uf',
-    'Nome_Município': 'nome_municipio',
-    'Código Município Completo': 'cod_municipio'
+    'NM_UF': 'uf',
+    'NM_MUN': 'nome_municipio',
+    'CD_MUN': 'cod_municipio' 
 }
 
 # REGRA DE NEGÓCIO: Resolve nomes de capitais duplicados
@@ -138,8 +140,8 @@ def _resolver_ambiguidade(row, mapa_ambiguas):
     Função auxiliar para aplicar a regra de negócio de desambiguação.
     Retorna True se a linha for a capital correta, False caso contrário.
     """
-    nome_municipio = row['Nome_Município']
-    nome_uf = row['Nome_UF']
+    nome_municipio = row['NM_MUN']
+    nome_uf = row['NM_UF']
     
     # Se o município não está no mapa, ele não é ambíguo. É uma capital.
     if nome_municipio not in mapa_ambiguas:
@@ -150,56 +152,61 @@ def _resolver_ambiguidade(row, mapa_ambiguas):
     return nome_uf == mapa_ambiguas[nome_municipio]
 
 
-def criar_dimensao_local(raw_file_path):
+def criar_dimensao_local(raw_file_path, lista_capitais, colunas_raw, mapa_ambiguas, mapa_rename):
     """
     Cria um DataFrame de dimensão de local, focado apenas nas 27 capitais.
-    Lê um arquivo XLS do IBGE, filtra e resolve ambiguidades.
+    (Versão SIMPLIFICADA, lendo de um CSV de Área)
     """
-    print(f"\n--- Iniciando criação da dim_local ---")
+    print(f"Iniciando criação da dim_local a partir de: {raw_file_path}")
     
     try:
-        # 1. Extrair dados brutos do IBGE
-        # 'header=6' pula as 6 primeiras linhas do XLS
-        df_ibge_raw = pd.read_excel(raw_file_path, header=6)
+        # 1. Extrair dados brutos (lendo o CSV)
+        df_ibge_raw = pd.read_excel(raw_file_path)
     except FileNotFoundError:
-        print(f"ERRO: Arquivo XLS do IBGE não encontrado em: {raw_file_path}")
+        print(f"ERRO: Arquivo CSV do IBGE não encontrado em: {raw_file_path}")
         raise
     except Exception as e:
-        print(f"ERRO ao ler o arquivo XLS: {e}")
+        print(f"ERRO ao ler o arquivo CSV: {e}")
         raise
 
     # 2. Selecionar apenas as colunas de interesse
-    df_local = df_ibge_raw[COLUNAS_IBGE_RAW].copy()
+    df_local = df_ibge_raw[colunas_raw].copy()
 
-    # 3. Filtro 1: Manter apenas linhas cujo nome está na lista de capitais
-    df_filtrado = df_local[df_local['Nome_Município'].isin(LISTA_CAPITAIS)].copy()
-    print(f"Arquivo IBGE filtrado: {len(df_filtrado)} linhas (incluindo homónimas).")
+    # 3. Primeiro filtro: Manter apenas linhas cujo nome está na lista de capitais
+    df_filtrado = df_local[df_local['NM_MUN'].isin(lista_capitais)].copy()
+    print(f"Arquivo IBGE filtrado, {len(df_filtrado)} linhas de capitais (incluindo homónimas).")
 
-    # 4. Filtro 2: Resolver ambiguidades (ex: "Belém, AL" vs "Belém, PA")
-    #    Aplicamos a função auxiliar a cada linha (axis=1)
+    # 4. Segundo filtro: Resolver ambiguidades
     df_filtrado['is_capital_real'] = df_filtrado.apply(
         _resolver_ambiguidade, 
         axis=1, 
-        mapa_ambiguas=MAPA_CAPITAIS_AMBIGUAS
+        mapa_ambiguas=mapa_ambiguas
     )
     
-    # Mantemos apenas as linhas marcadas como 'True'
     df_final_capitais = df_filtrado[df_filtrado['is_capital_real'] == True].copy()
     
+    # Verificação de segurança
     if len(df_final_capitais) != 27:
-        print(f"ATENÇÃO! Esperava-se 27 capitais, mas {len(df_final_capitais)} foram encontradas.")
+        print(f"ATENÇÃO! Esperava-se 27 capitais, mas {len(df_final_capitais) } foram encontradas.")
     else:
         print("Desambiguação concluída. 27 capitais únicas isoladas.")
 
     # 5. Renomear colunas para o padrão do DW
-    df_final_capitais.rename(columns=MAPA_RENOMEAR_LOCAL, inplace=True)
+    df_final_capitais.rename(columns=mapa_rename, inplace=True)
+
+    # Converte a coluna 'cod_municipio' (que é float) para INT (para remover o ".0")
+    # e DEPOIS para STRING, para que seja salva como texto "1100015".
+    df_final_capitais['cod_municipio'] = pd.to_numeric(
+        df_final_capitais['cod_municipio'], 
+        errors='coerce' # Ignora se houver algum erro de texto
+    ).fillna(0).astype(int).astype(str)
 
     # 6. Criar a Chave Primária (PK)
     df_final_capitais.sort_values('nome_municipio', inplace=True)
     df_final_capitais.reset_index(drop=True, inplace=True)
     df_final_capitais['id_local'] = df_final_capitais.index + 1
 
-    # 7. Reordenar colunas
+    # 7. Reordenar colunas para o schema final
     colunas_finais_local = ['id_local', 'uf', 'cod_municipio', 'nome_municipio']
     dim_local = df_final_capitais[colunas_finais_local]
     
@@ -242,7 +249,13 @@ def main():
 
     # 2. Processar e Salvar Dimensão Local
     try:
-        dim_local = criar_dimensao_local(PATH_RAW_LOCAL)
+        dim_local = criar_dimensao_local(
+            PATH_FONTE_LOCAL, # O novo caminho do CSV
+            LISTA_CAPITAIS,
+            COLUNAS_IBGE_RAW,
+            MAPA_CAPITAIS_AMBIGUAS,
+            MAPA_RENOMEAR_LOCAL
+        )
         salvar_csv(dim_local, PATH_DIM_LOCAL_SAIDA)
     except Exception as e:
         print(f"Falha ao processar Dimensão Local: {e}")

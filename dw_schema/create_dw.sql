@@ -52,6 +52,8 @@ create table if not exists fato_clima (
 create table if not exists fato_socioeconomico (
     id_local int,
     id_tempo int,
+    area_territorio float,
+    densidade_demografica float,
     num_agua_tratada int,
     num_populacao int,
     num_esgoto int,
