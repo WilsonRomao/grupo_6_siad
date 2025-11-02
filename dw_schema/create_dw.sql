@@ -1,5 +1,5 @@
-create database if not exists dw_siad;
-use dw_siad;
+create database if not exists dw_dengue;
+use dw_dengue;
 
 create table if not exists dim_tempo (
     id_tempo int primary key,             

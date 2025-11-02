@@ -1,36 +1,21 @@
-# -*- coding: utf-8 -*-
 """
-Pipeline de ETL para dados Meteorológicos (INMET)
+Pipeline de ETL Simplificado para dados Meteorológicos (INMET)
 
-Este script executa o processo completo de ETL para múltiplos arquivos
-de dados climáticos das capitais.
-
-1.  Monta o Google Drive.
-2.  Carrega as dimensões 'local' e 'tempo'.
-3.  Varre a pasta de dados brutos em busca de todos os arquivos de clima.
-4.  Para cada arquivo:
-    a. Extrai metadados (UF, Cidade) do cabeçalho.
-    b. Extrai os dados horários.
-    c. Limpa e transforma os dados (corrige vírgulas, trata NaNs).
-    d. Agrega de horário para diário.
-    e. Mapeia as FKs (id_local, id_tempo) das dimensões.
-    f. Agrega de diário para semanal (nível da Fato).
-5.  Concatena os resultados de todos os arquivos.
-6.  Salva (sobrescreve) o arquivo 'fato_clima.csv' final.
+Este script executa o processo de ETL:
+1.  Carrega as dimensões 'local' e 'tempo'.
+2.  Varre a pasta de dados brutos e processa um arquivo de cada vez.
+3.  Para cada arquivo:
+    a. Extrai metadados (UF, Cidade) e os dados horários.
+    b. Executa a função de transformação e agregação.
+4.  Junta os resultados de todos os arquivos.
+5.  Salva o arquivo 'fato_clima.csv' final.
 """
 
 import os
 import glob
 import pandas as pd
 import numpy as np
-
-# Tenta importar o 'drive' do Colab
-try:
-    from google.colab import drive
-except ImportError:
-    print("Aviso: Módulo 'google.colab.drive' não encontrado. "
-          "A saltar a montagem do drive. Certifique-se que os caminhos são acessíveis.")
-    drive = None
+import unicodedata 
 
 # =============================================================================
 # 1. CONFIGURAÇÃO E CONSTANTES
@@ -49,12 +34,11 @@ PATH_DIM_TEMPO = os.path.join(PATH_PROCESSADOS, 'dim_tempo.csv')
 PATH_DIM_LOCAL = os.path.join(PATH_PROCESSADOS, 'dim_local.csv')
 
 # PADRÃO DE ENTRADA (Dados Brutos)
-# Usa o wildcard (*) para encontrar todos os arquivos CSV na pasta
 PADRAO_ARQUIVOS_CLIMA = os.path.join(
     PATH_BRUTOS, 'meteorologico','apenas_capitais','INMET_*.CSV'
 )
 
-# --- Configurações de Schema e Transformação ---
+# --- Definições de Schema para Extração ---
 
 # Colunas que queremos manter e seus novos nomes
 MAPA_COLUNAS_CLIMA = {
@@ -62,75 +46,44 @@ MAPA_COLUNAS_CLIMA = {
     'PRECIPITAÇÃO TOTAL, HORÁRIO (mm)': 'precipitacao_total',
     'TEMPERATURA DO AR - BULBO SECO, HORARIA (°C)': 'temperatura'
 }
+# Versão 2 do schema (nomes de colunas ligeiramente diferentes)
+MAPA_COLUNAS_CLIMA_V2 = {
+    'DATA (YYYY-MM-DD)': 'Data',
+    'PRECIPITAÇÃO TOTAL, HORÁRIO (mm)': 'precipitacao_total',
+    'TEMPERATURA DO AR - BULBO SECO, HORARIA (°C)': 'temperatura'
+}
+# Colunas que precisam de tratamento numérico
 COLUNAS_NUMERICAS = ['precipitacao_total', 'temperatura']
 
 # =============================================================================
 # FUNÇÕES AUXILIARES
 # =============================================================================
 
-def mount_google_drive():
-    """
-    Monta o Google Drive se o script estiver a ser executado no Google Colab.
-    """
-    if drive:
-        try:
-            drive.mount('/content/drive')
-            print("Google Drive montado com sucesso.")
-        except Exception as e:
-            print(f"Erro ao montar o Google Drive: {e}")
-            raise
-    else:
-        print("A saltar a montagem do Google Drive (não estamos no Colab).")
-
-def carregar_dimensao(file_path, dtypes=None):
-    """
-    Função genérica para carregar um arquivo CSV de dimensão.
-    !! Inclui a correção sep=';' !!
-
-    Entrada:
-    - file_path (str): Caminho completo para o arquivo CSV.
-    - dtypes (dict, opcional): Dicionário de tipos de dados.
-
-    Saída:
-    - (pd.DataFrame): DataFrame da dimensão carregada.
-    """
+def carregar_csv(file_path, separador=';'):
+    """Função genérica para carregar um arquivo CSV (como as dimensões)."""
     try:
-        # CORREÇÃO: Adicionado sep=';' para ler os arquivos salvos
-        df = pd.read_csv(file_path, dtype=dtypes, sep=';')
-        print(f"Dimensão '{os.path.basename(file_path)}' carregada com {len(df)} linhas.")
+        df = pd.read_csv(file_path, sep=separador)
+        print(f"Arquivo '{os.path.basename(file_path)}' carregado ({len(df)} linhas).")
         return df
     except FileNotFoundError:
-        print(f"ERRO: Arquivo de dimensão não encontrado em: {file_path}")
+        print(f"ERRO: Arquivo não encontrado em: {file_path}")
         raise
-    except Exception as e:
-        print(f"ERRO ao carregar dimensão {file_path}: {e}")
-        raise
-
 
 # =============================================================================
 # ETAPA DE EXTRAÇÃO (EXTRACT)
 # =============================================================================
 
-def extrair_metadata_clima(file_path):
-    """
-    Lê o cabeçalho de um arquivo INMET (primeiras 8 linhas)
-    para extrair a UF e a Cidade.
-
-    Entrada:
-    - file_path (str): Caminho para o arquivo INMET.
-
-    Saída:
-    - (dict): Dicionário com 'uf' e 'cidade' (ex: {'uf': 'MG', 'cidade': 'BELO HORIZONTE'}).
-    """
+def extrair_metadados_clima(file_path):
+    """Lê o cabeçalho de um arquivo INMET (8 linhas) para extrair UF e Cidade."""
     try:
-        # Lê apenas as 8 primeiras linhas do cabeçalho
+        # Lê apenas as 8 primeiras linhas
         df_header = pd.read_csv(
             file_path,
-            sep=':;',          # O cabeçalho usa ':;' como separador
+            sep=':;',          # Separador do cabeçalho
             encoding='latin-1',
-            nrows=8,           # Apenas as linhas de metadados
-            header=None,       # Não há cabeçalho de colunas
-            engine='python'    # Necessário para separadores regex como ':;'
+            nrows=8,
+            header=None,
+            engine='python'
         )
         
         local = {
@@ -143,135 +96,129 @@ def extrair_metadata_clima(file_path):
         print(f"  ERRO: Não foi possível ler os metadados do arquivo: {e}")
         return None
 
-def extrair_dados_clima(file_path, colunas_map):
+def extrair_dados_clima(file_path):
     """
     Lê os dados climáticos horários de um arquivo INMET,
-    pulando o cabeçalho e selecionando colunas.
-
-    Entrada:
-    - file_path (str): Caminho para o arquivo INMET.
-    - colunas_map (dict): Dicionário de colunas para manter.
-
-    Saída:
-    - (pd.DataFrame): DataFrame com os dados brutos horários.
+    pulando o cabeçalho e tentando ler dois formatos (v1 e v2).
     """
+    df = None
+    rename_map = None
+
     try:
+        # 1. Tenta ler com o padrão v1
         df = pd.read_csv(
             file_path,
-            sep=';',           # Os dados usam ';' como separador
+            sep=';',
             encoding='latin-1',
-            skiprows=8,        # Pula as 8 linhas de metadados
-            usecols=list(colunas_map.keys()) # Lê apenas as colunas de interesse
+            skiprows=8,
+            usecols=list(MAPA_COLUNAS_CLIMA.keys())
         )
-        
-        # Remove a última coluna 'Unnamed' se ela existir (comum em CSVs do INMET)
-        df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
-        
-        # Renomeia as colunas
-        df = df.rename(columns=colunas_map)
-        return df
-        
-    except Exception as e:
-        print(f"  ERRO: Não foi possível ler os dados do arquivo: {e}")
-        return pd.DataFrame()
+        rename_map = MAPA_COLUNAS_CLIMA
 
+    except ValueError:
+        # 2. Se falhar (ValueError), tenta ler com o padrão v2
+        try:
+            df = pd.read_csv(
+                file_path,
+                sep=';',
+                encoding='latin-1',
+                skiprows=8,
+                usecols=list(MAPA_COLUNAS_CLIMA_V2.keys())
+            )
+            rename_map = MAPA_COLUNAS_CLIMA_V2
+        except Exception as e_novo:
+            print(f"  ERRO: Falha ao tentar ler padrão v2 em {file_path}: {e_novo}")
+            return pd.DataFrame() # Retorna DF vazio
+            
+    except Exception as e_gen:
+        print(f"  ERRO genérico ao processar o arquivo {file_path}: {e_gen}")
+        return pd.DataFrame() # Retorna DF vazio
+
+    # 3. Se o df foi carregado com SUCESSO:
+    if df is not None:
+        try:
+            df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
+            df = df.rename(columns=rename_map)
+            return df
+        except Exception as e_proc:
+            print(f"  ERRO ao processar (renomear/limpar) {file_path}: {e_proc}")
+            return pd.DataFrame()
+
+    print(f"  ERRO: A leitura de {file_path} falhou (formato irreconhecível).")
+    return pd.DataFrame()
 
 # =============================================================================
-# ETAPA DE TRANSFORMAÇÃO (TRANSFORM)
+# ETAPA DE TRANSFORMAÇÃO E AGREGAÇÃO (TRANSFORM)
 # =============================================================================
 
-def transformar_dados_clima(df, colunas_numericas):
+def transformar_e_agregar_clima(df_raw, metadata_local, dim_tempo, dim_local):
     """
-    Limpa o DataFrame de clima horário:
-    1. Converte 'Data' para datetime.
-    2. Corrige valores numéricos (ex: ',8' -> '0,8').
-    3. Converte colunas numéricas para float (lidando com ',' decimal).
-    4. Interpola valores NaN (nulos) de forma temporal.
-
-    Entrada:
-    - df (pd.DataFrame): DataFrame bruto.
-    - colunas_numericas (list): Lista de colunas para tratar.
-
-    Saída:
-    - (pd.DataFrame): DataFrame limpo e pronto para agregar.
+    Função consolidada que limpa, transforma, enriquece e agrega os dados.
+    Recebe os dados horários de UM arquivo e retorna os dados semanais.
     """
-    if df.empty:
+    if df_raw.empty:
         return pd.DataFrame()
 
-    # 1. Converter 'Data' para datetime
-    df['Data'] = pd.to_datetime(df['Data'], format='%Y/%m/%d')
+    # --- ETAPA 1: LIMPEZA E TRANSFORMAÇÃO (de transformar_dados_clima) ---
+    df = df_raw.copy()
     
-    # 2. Corrigir problema do ',8' (precipitação)
+    # 1.1. Converter 'Data' para datetime
+    df['Data'] = pd.to_datetime(df['Data'])
+    
+    # 1.2. Corrigir problema do ',8' (precipitação)
     df['precipitacao_total'] = df['precipitacao_total'].astype(str).str.replace(
         '^,', '0,', regex=True
     )
 
-    # 3. Converter colunas numéricas (e tratar decimais com vírgula)
-    for col in colunas_numericas:
-        # Troca a vírgula decimal por ponto
+    # 1.3. Converter colunas numéricas (e tratar decimais com vírgula)
+    for col in COLUNAS_NUMERICAS:
         df[col] = df[col].astype(str).str.replace(',', '.', regex=False)
-        # Converte para numérico, forçando erros (textos) para NaN
         df[col] = pd.to_numeric(df[col], errors='coerce')
 
-    # 4. Interpolar valores NaN (Nulos)
-    # Esta é a forma correta: interpolar *depois* de converter para numérico.
-    # Usamos 'time' para preencher NaNs baseando-se no tempo (requer índice de data)
+    # 1.4. Interpolar (preencher) valores NaN (Nulos)
     df = df.set_index('Data')
-    df[colunas_numericas] = df[colunas_numericas].interpolate(method='time')
+    df[COLUNAS_NUMERICAS] = df[COLUNAS_NUMERICAS].interpolate(method='time')
+    df[COLUNAS_NUMERICAS] = df[COLUNAS_NUMERICAS].ffill().bfill() # Preenche pontas
     
-    # Preenche quaisquer NaNs restantes (no início ou fim do arquivo)
-    df[colunas_numericas] = df[colunas_numericas].ffill()
-    df[colunas_numericas] = df[colunas_numericas].bfill()
-    
-    return df.reset_index()
+    df_limpo = df.reset_index()
 
+    # --- ETAPA 2: AGREGAÇÃO (de agregar_dados_clima) ---
 
-# =============================================================================
-# ETAPA DE AGREGAÇÃO (AGGREGATE)
-# =============================================================================
-
-def agregar_dados_clima(df_limpo, dim_tempo, dim_local, metadata_local):
-    """
-    Agrega os dados limpos em 3 passos:
-    1. Horário -> Diário
-    2. Mapeia FKs (id_local, id_tempo)
-    3. Diário -> Semanal (nível da Fato)
-
-    Entrada:
-    - df_limpo (pd.DataFrame): Dados horários limpos.
-    - dim_tempo (pd.DataFrame): Dimensão de Tempo.
-    - dim_local (pd.DataFrame): Dimensão de Local.
-    - metadata_local (dict): {'uf': 'MG', 'cidade': 'BELO HORIZONTE'}
-
-    Saída:
-    - (pd.DataFrame): DataFrame agregado por semana, pronto para a Fato.
-    """
-    
-    # --- PASSO 1: AGREGAR (HORÁRIO -> DIÁRIO) ---
+    # 2.1. AGREGAR (HORÁRIO -> DIÁRIO)
     df_agregado_diario = df_limpo.groupby('Data').agg(
         temperatura_media=('temperatura', 'mean'),
         precipitacao_total=('precipitacao_total', 'sum')
     ).reset_index()
 
-    # --- PASSO 2: ENRIQUECER (BUSCAR FKS) ---
+    # 2.2. ENRIQUECER (BUSCAR FKS)
     
-    # 2.1. Buscar ID_Local
-    cidade_atual = metadata_local['cidade']
+    # 1. Normaliza a cidade do arquivo (diretamente)
+    cidade_atual_norm = unicodedata.normalize('NFD', str(metadata_local['cidade'])) \
+        .encode('ascii', 'ignore') \
+        .decode('utf-8') \
+        .upper()
     
-    # Compara o nome da cidade (em maiúsculas) com a dim_local
-    resultado_local = dim_local[
-        dim_local['nome_municipio'].str.upper() == cidade_atual.upper()
-    ]
-    
-    id_local = None
-    if not resultado_local.empty:
-        id_local = resultado_local.iloc[0]['id_local']
-    else:
-        print(f"  AVISO: Não foi possível encontrar o ID_local para '{cidade_atual}'. A saltar este arquivo.")
-        return pd.DataFrame() # Retorna DF vazio
+    # 2. Normaliza a coluna de municípios (usando .apply com lambda)
+    nomes_municipio_norm = dim_local['nome_municipio'].apply(
+        lambda texto: unicodedata.normalize('NFD', str(texto))
+                                .encode('ascii', 'ignore')
+                                .decode('utf-8')
+                                .upper()
+    )
 
-    # 2.2. Buscar ID_Tempo (e dados da semana)
-    # Garante que as chaves de data estão no formato datetime
+    # 3. Compara as duas strings normalizadas
+    resultado_local = dim_local[
+        nomes_municipio_norm == cidade_atual_norm
+    ]
+        
+    if resultado_local.empty:
+        # A mensagem de aviso agora mostra o nome original E o normalizado
+        print(f"  AVISO: ID_local não encontrado para '{metadata_local['cidade']}' (Normalizado: '{cidade_atual_norm}'). A saltar este arquivo.")
+        return pd.DataFrame() # Retorna DF vazio
+    
+    id_local = resultado_local.iloc[0]['id_local']
+
+    # Buscar ID_Tempo (e dados da semana)
     dim_tempo['data_completa'] = pd.to_datetime(dim_tempo['data_completa'])
     df_agregado_diario['Data'] = pd.to_datetime(df_agregado_diario['Data'])
 
@@ -280,32 +227,23 @@ def agregar_dados_clima(df_limpo, dim_tempo, dim_local, metadata_local):
         dim_tempo,
         left_on='Data',
         right_on='data_completa',
-        how='inner' # Garante que só mantemos dias que existem na dim_tempo
+        how='inner' # Só mantém dias que existem na dim_tempo
     )
 
-    # --- PASSO 3: AGREGAR (DIÁRIO -> SEMANAL) ---
-    # Agrupamos pelo ID_Local e pela Chave de Tempo Semanal (ano + semana)
+    # 2.3. AGREGAR (DIÁRIO -> SEMANAL)
     df_agregado_semanal = df_diario_com_chaves.groupby(
         ['ano_epidemiologico', 'semana_epidemiologica']
     ).agg(
-        # Para o ID_Tempo(FK), pegamos o ID do último dia daquele grupo semanal
-        id_tempo=('id_tempo', 'last'),
-        
-        # Para a temperatura, calculamos a MÉDIA das médias diárias
+        id_tempo=('id_tempo', 'last'), # FK: Pega o ID do último dia da semana
         temperatura_media=('temperatura_media', 'mean'),
-        
-        # Para a precipitação, calculamos a SOMA das somas diárias
         precipitacao_total=('precipitacao_total', 'sum')
-        
     ).reset_index()
 
-    # Adiciona o ID_Local (FK) que encontrámos
+    # Adiciona o ID_Local (FK) e arredonda os valores
     df_agregado_semanal['id_local'] = id_local
-    
-    # Arredonda e limpa
     df_agregado_semanal['temperatura_media'] = df_agregado_semanal['temperatura_media'].round(2)
 
-    # Seleciona e reordena as colunas finais para a Fato
+    # Seleciona e reordena as colunas finais
     colunas_fato_clima = ['id_tempo', 'id_local', 'temperatura_media', 'precipitacao_total']
     
     return df_agregado_semanal[colunas_fato_clima]
@@ -315,27 +253,18 @@ def agregar_dados_clima(df_limpo, dim_tempo, dim_local, metadata_local):
 # ETAPA DE CARGA (LOAD)
 # =============================================================================
 
-def carregar_fato_clima(df_final, output_path):
-    """
-    Salva (SOBRESCRVENDO) o DataFrame agregado final em um CSV.
-
-    Entrada:
-    - df_final (pd.DataFrame): O DataFrame completo da Fato Clima.
-    - output_path (str): Caminho completo onde o CSV será salvo.
-    """
+def salvar_csv(df_final, output_path):
+    """Salva (SOBRESCRVENDO) o DataFrame agregado final em um CSV."""
     print(f"\nA salvar dados finais em: {output_path}")
     try:
-        # Salva o arquivo final, sobrescrevendo (mode='w')
-        # Usamos sep=';' para manter o padrão dos outros arquivos
+        # Salva o arquivo final
         df_final.to_csv(output_path, index=False, mode='w', header=True, sep=';')
         
         print(f"--- SUCESSO! ---")
         print(f"'fato_clima.csv' salvo com {len(df_final)} linhas.")
     
     except Exception as e:
-        print(f"\n--- ERRO AO SALVAR O CSV ---")
-        print(f"Não foi possível salvar o arquivo em: {output_path}")
-        print(f"Erro: {e}")
+        print(f"\n--- ERRO AO SALVAR O CSV: {e} ---")
         raise
 
 
@@ -344,18 +273,13 @@ def carregar_fato_clima(df_final, output_path):
 # =============================================================================
 
 def main():
-    """
-    Função principal que orquestra todo o pipeline de ETL do Clima.
-    """
-    print("========= INICIANDO PIPELINE ETL CLIMA =========")
     
-    # 0. Montar o Google Drive (apenas se estiver no Colab)
-    mount_google_drive()
+    print("========= INICIANDO PIPELINE ETL CLIMA =========")
     
     # 1. Carregar Dimensões (apenas uma vez)
     try:
-        dim_tempo = carregar_dimensao(PATH_DIM_TEMPO)
-        dim_local = carregar_dimensao(PATH_DIM_LOCAL)
+        dim_tempo = carregar_csv(PATH_DIM_TEMPO)
+        dim_local = carregar_csv(PATH_DIM_LOCAL)
     except Exception as e:
         print(f"Pipeline interrompido: Falha ao carregar dimensões. Erro: {e}")
         return
@@ -368,7 +292,7 @@ def main():
 
     print(f"Encontrados {len(all_files)} arquivos de clima para processar...")
     
-    # Lista para guardar os DataFrames processados (semanais)
+    # Lista para guardar os resultados processados de cada arquivo
     lista_dfs_semanais = []
     
     # 3. Loop de Processamento (Extract, Transform, Aggregate)
@@ -376,40 +300,37 @@ def main():
         print(f"\n--- Processando arquivo {i+1}/{len(all_files)} ---")
         print(f"  Arquivo: {os.path.basename(file_path)}")
         
-        # 3.1. Extract (Metadados e Dados)
-        metadata = extrair_metadata_clima(file_path)
+        # 3.1. Extract
+        metadata = extrair_metadados_clima(file_path)
         if metadata is None:
-            continue # Salta para o próximo arquivo se não conseguir ler metadados
+            continue # Salta para o próximo arquivo
 
         print(f"  Metadados: {metadata['cidade']} - {metadata['uf']}")
         
-        df_raw = extrair_dados_clima(file_path, MAPA_COLUNAS_CLIMA)
+        df_raw = extrair_dados_clima(file_path)
         if df_raw.empty:
-            continue # Salta para o próximo arquivo se não conseguir ler os dados
+            continue # Salta para o próximo arquivo
 
-        # 3.2. Transform
-        df_clean = transformar_dados_clima(df_raw, COLUNAS_NUMERICAS)
-        
-        # 3.3. Aggregate
-        df_semanal = agregar_dados_clima(
-            df_clean, dim_tempo, dim_local, metadata
+        # 3.2. Transform & Aggregate (Função Consolidada)
+        df_semanal = transformar_e_agregar_clima(
+            df_raw, metadata, dim_tempo, dim_local
         )
         
         if not df_semanal.empty:
             lista_dfs_semanais.append(df_semanal)
             print(f"  Processado com sucesso: {len(df_semanal)} semanas agregadas.")
 
-    # 4. Concatenar todos os resultados
+    # 4. Concatenar (Juntar) todos os resultados
     if not lista_dfs_semanais:
         print("\nNenhum dado foi processado com sucesso.")
         print("========= PIPELINE ETL CLIMA CONCLUÍDO (SEM DADOS) =========")
         return
 
-    print(f"\nConcatenando resultados de {len(lista_dfs_semanais)} DataFrames...")
+    print(f"\nConcatenando resultados de {len(lista_dfs_semanais)} arquivos...")
     fato_clima_final = pd.concat(lista_dfs_semanais, ignore_index=True)
 
     # 5. Carregar (Load) - Salva o arquivo final
-    carregar_fato_clima(fato_clima_final, PATH_SAIDA_FATO)
+    salvar_csv(fato_clima_final, PATH_SAIDA_FATO)
     
     print("\n========= PIPELINE ETL CLIMA CONCLUÍDO =========")
 

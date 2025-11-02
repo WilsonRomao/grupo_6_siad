@@ -1,36 +1,33 @@
 # -*- coding: utf-8 -*-
 """
-Pipeline de E-T (Extract-Transform) para Fato Socioeconômico.
+Pipeline de E-T (Extract-Transform) Simplificado para Fato Socioeconômico.
 
 Este script executa o processo de E-T:
-1. Monta o Google Drive (se estiver no Colab).
-2. Extrai dados brutos do SNIS (fonte principal).
+1. Monta o Google Drive.
+2. Extrai dados brutos do SNIS.
 3. Carrega as dimensões 'local' e 'tempo'.
-4. Executa um pipeline de transformação para limpar, filtrar e enriquecer os dados.
+4. Executa uma transformação completa numa única função.
 5. Salva o DataFrame agregado final (fato) como um CSV.
 """
 
 import os
 import pandas as pd
 
-# Tenta importar o 'drive' do Colab, mas não quebra se não estiver no Colab
+# Tenta importar o 'drive' do Colab
 try:
     from google.colab import drive
 except ImportError:
-    print("Aviso: Módulo 'google.colab.drive' não encontrado. "
-          "Skipping drive mount. Certifique-se que os caminhos são acessíveis.")
+    print("Aviso: Não estamos no Google Colab. A montagem do Drive será ignorada.")
     drive = None
 
 # =============================================================================
 # 1. CONFIGURAÇÃO E CONSTANTES
 # =============================================================================
-# Centralizar todas as configurações aqui facilita a manutenção.
 
 # --- Caminhos (Paths) ---
 BASE_PATH = 'dados'
 PATH_PROCESSADOS = os.path.join(BASE_PATH, 'processados')
 PATH_BRUTOS = os.path.join(BASE_PATH, 'brutos')
-
 
 CAMINHOS_ETL = {
     'bruto_snis': os.path.join(PATH_BRUTOS, 'br_mdr_snis_municipio_agua_esgoto.csv'),
@@ -39,13 +36,11 @@ CAMINHOS_ETL = {
     'saida_fato_csv': os.path.join(PATH_PROCESSADOS, 'fato_socioeconomico.csv')
 }
 
-# --- Definições de Schema para Extração ---
-# Otimização: ler apenas as colunas que realmente usamos.
+# --- Definições de Schema para Extração (Otimização) ---
 SCHEMA_SNIS_COLS = [
     'ano', 'id_municipio', 'sigla_uf', 
     'populacao_atendida_agua', 'populacao_atentida_esgoto', 'populacao_urbana'
 ]
-
 SCHEMA_DIM_LOCAL_COLS = ['id_local', 'cod_municipio']
 SCHEMA_DIM_TEMPO_COLS = ['id_tempo', 'ano', 'mes', 'dia']
 
@@ -58,20 +53,16 @@ COLUNAS_METRICAS_PARA_LIMPAR = [
     'populacao_urbana'
 ]
 
-# Regra de negócio para Fato Anual: buscar o ID do dia 1º de Janeiro
-REGRA_TEMPO_ANUAL = {
-    'mes': 1,
-    'dia': 1
-}
+# Regra de negócio: Fato Anual (usar o dia 1º de Janeiro)
+REGRA_TEMPO_ANUAL = {'mes': 1, 'dia': 1}
 
-# Mapeamento final dos nomes das colunas da tabela Fato
+# Mapeamento final dos nomes das colunas
 COLUNAS_FATO_RENAME_MAP = {
     'id_local': 'id_local',
     'id_tempo': 'id_tempo',
     'populacao_atendida_agua': 'num_agua_tratada',
     'populacao_urbana': 'num_populacao',
     'populacao_atentida_esgoto': 'num_esgoto'
-    
 }
 # Colunas finais que devem estar no CSV
 COLUNAS_FATO_FINAL = [
@@ -84,16 +75,13 @@ COLUNAS_FATO_FINAL = [
 # =============================================================================
 
 def mount_google_drive():
-    """
-    Monta o Google Drive se o script estiver rodando no Google Colab.
-    """
+    """Monta o Google Drive se o script estiver rodando no Google Colab."""
     if drive:
         try:
             drive.mount('/content/drive')
             print("Google Drive montado com sucesso.")
         except Exception as e:
             print(f"Erro ao montar o Google Drive: {e}")
-            raise
     else:
         print("Skipping Google Drive mount (não estamos no Colab).")
 
@@ -102,21 +90,11 @@ def mount_google_drive():
 # =============================================================================
 
 def extrair_dados_brutos(file_path, usecols):
-    """
-    Lê o arquivo CSV principal de dados brutos (SNIS).
-
-    @param file_path (str): Caminho para o arquivo CSV.
-    @param usecols (list): Lista de colunas para carregar (otimização).
-    @return (pd.DataFrame): DataFrame bruto.
-    """
+    """Lê o arquivo CSV principal de dados brutos (SNIS)."""
     print(f"\n--- INICIANDO [E]XTRAÇÃO ---")
     print(f"A ler dados brutos: {file_path}")
     try:
-        df = pd.read_csv(
-            file_path,
-            sep=',',
-            usecols=usecols
-        )
+        df = pd.read_csv(file_path, sep=',', usecols=usecols)
         print(f"Dados brutos lidos com sucesso ({len(df)} linhas).")
         return df
     except FileNotFoundError:
@@ -127,15 +105,9 @@ def extrair_dados_brutos(file_path, usecols):
         raise
 
 def carregar_dimensao(file_path, usecols):
-    """
-    Função genérica para carregar um arquivo CSV de dimensão.
-
-    @param file_path (str): Caminho completo para o arquivo CSV.
-    @param usecols (list): Lista de colunas para carregar.
-    @return (pd.DataFrame): DataFrame da dimensão carregada.
-    """
+    """Função genérica para carregar um arquivo CSV de dimensão."""
     try:
-        df = pd.read_csv(file_path, sep=';',usecols=usecols)
+        df = pd.read_csv(file_path, sep=';', usecols=usecols)
         print(f"Dimensão '{os.path.basename(file_path)}' carregada com {len(df)} linhas.")
         return df
     except FileNotFoundError:
@@ -149,175 +121,87 @@ def carregar_dimensao(file_path, usecols):
 # ETAPA DE TRANSFORMAÇÃO (TRANSFORM)
 # =============================================================================
 
-def _preparar_dim_local(dim_local):
-    """Helper: Prepara a dim_local para o merge."""
-    df = dim_local.copy()
-    
-    # --- CORREÇÃO AQUI ---
-    # Converte o cod_municipio (7 dígitos, ex: 2800308) para 6 dígitos INT
-    # para que corresponda à chave que criamos para o SNIS.
-    df['cod_municipio_6dig'] = df['cod_municipio'].astype(str).str[:-1].astype(int)
-    
-    # Mantém o original para referência, mas a chave de 6 dígitos é para o merge
-    df['cod_municipio'] = df['cod_municipio'].astype(int)
-    return df    
-
-
-def _preparar_dim_tempo(dim_tempo, mes_regra, dia_regra):
-    """Helper: Prepara a dim_tempo aplicando a regra de negócio anual."""
-    df = dim_tempo.copy()
-    
-    # Regra de negócio: Esta Fato é anual. Usamos o ID do dia 1º de Janeiro.
-    dim_tempo_anual = df[
-        (df['mes'] == mes_regra) & (df['dia'] == dia_regra)
-    ].copy()
-    
-    # Seleciona apenas colunas necessárias e garante o tipo
-    dim_tempo_anual = dim_tempo_anual[['id_tempo', 'ano']]
-    dim_tempo_anual['ano'] = dim_tempo_anual['ano'].astype(int)
-    
-    print(f"Regra de tempo (anual) aplicada. {len(dim_tempo_anual)} chaves de ano encontradas.")
-    return dim_tempo_anual
-
-def _ajustar_e_filtrar_dados(df_bruto, dim_local_clean, ano_filtro):
+def transformar_dados_socioeconomicos(df_bruto, dim_local, dim_tempo):
     """
-    Helper: Aplica os filtros iniciais (ano, município) e ajusta a
-    chave do município (7 para 6 dígitos).
-    """
-    print("A ajustar chave de município (7 para 6 dígitos)...")
-    df = df_bruto.copy()
-    df['id_municipio_6dig'] = df['id_municipio'].astype(str).str[:-1].astype(int)
-    
-    print(f"A filtrar por ano (>= {ano_filtro})...")
-    df_filtrado_ano = df[df['ano'] >= ano_filtro].copy()
-    print(f"Registos após filtro de ano: {len(df_filtrado_ano)}")
-    
-    # --- CORREÇÃO AQUI ---
-    # Agora usamos a nova coluna 'cod_municipio_6dig' da dimensão
-    municipios_validos = dim_local_clean['cod_municipio_6dig'].unique()
-
-    print("A filtrar municípios (apenas os da dim_local)...")
-    df_filtrado = df_filtrado_ano[
-        df_filtrado_ano['id_municipio_6dig'].isin(municipios_validos)
-    ].copy()
-    
-    print(f"Registos após filtros iniciais: {len(df_filtrado)}")
-    if len(df_filtrado) == 0:
-        print("AVISO: Nenhum registo encontrado após filtros. Pipeline pode falhar.")
-        
-    return df_filtrado
-
-def _limpar_valores_nulos(df, colunas_metricas):
-    """Helper: Preenche valores nulos (NaN -> 0) nas colunas de métrica."""
-    print("A tratar valores nulos (NaN -> 0) nas métricas...")
-    df_clean = df.copy()
-    for col in colunas_metricas:
-        if col in df_clean.columns:
-            df_clean[col] = df_clean[col].fillna(0).astype(int)
-    
-    print("Nulos preenchidos.")
-    return df_clean
-
-def _mapear_dimensoes(df, dim_local_clean, dim_tempo_anual):
-    """Helper: Faz o merge (join) com as dimensões local e tempo."""
-    print("Mapeando dimensões (buscando Foreign Keys)...")
-    
-    # --- CORREÇÃO AQUI ---
-    # O merge deve ser feito usando as duas chaves de 6 dígitos.
-    df_com_local = pd.merge(
-        df,
-        dim_local_clean[['id_local', 'cod_municipio_6dig']], # Pedimos a coluna de 6 dígitos
-        left_on='id_municipio_6dig',
-        right_on='cod_municipio_6dig', # Fazemos o merge com a coluna de 6 dígitos
-        how='left' 
-    )
-    
-    # 2. Merge com Dim_Tempo (Esta parte estava correta)
-    df_com_local['ano'] = df_com_local['ano'].astype(int)
-    
-    df_com_chaves = pd.merge(
-        df_com_local,
-        dim_tempo_anual,
-        left_on='ano',
-        right_on='ano',
-        how='left'
-    )
-    
-    # 3. Verificação
-    nulos_tempo = df_com_chaves['id_tempo'].isnull().sum()
-    nulos_local = df_com_chaves['id_local'].isnull().sum()
-    if nulos_tempo > 0:
-        print(f"Aviso: {nulos_tempo} registros não encontraram ID_tempo (anos fora da dim_tempo?).")
-    if nulos_local > 0:
-        print(f"Aviso: {nulos_local} registros não encontraram ID_Local (municípios fora da dim_local?).")
-        
-    df_final = df_com_chaves.dropna(subset=['id_local', 'id_tempo'])
-    print(f"Mapeamento de dimensões concluído. {len(df_final)} registos válidos encontrados.")
-    
-    return df_final
-
-def _finalizar_schema_fato(df, rename_map, colunas_finais):
-    """Helper: Renomeia as colunas e seleciona apenas as colunas finais da Fato."""
-    print("A renomear e selecionar colunas finais para a Fato...")
-    
-    df_renomeado = df.rename(columns=rename_map)
-    
-    # Filtra o DataFrame para ter apenas as colunas finais
-    df_para_carga = df_renomeado[colunas_finais]
-    
-    return df_para_carga
-
-
-def pipeline_transformacao(df_bruto, dim_local, dim_tempo, constantes):
-    """
-    Orquestra todas as etapas de transformação dos dados.
-
-    @param df_bruto (pd.DataFrame): DataFrame bruto da extração.
-    @param dim_local (pd.DataFrame): Dimensão de local.
-    @param dim_tempo (pd.DataFrame): Dimensão de tempo.
-    @param constantes (dict): Dicionário com regras de negócio.
-
-    @return (pd.DataFrame): Tabela Fato final, pronta para carga.
+    Função consolidada que executa todas as etapas de transformação:
+    Limpeza, preparação de chaves, filtros e merges.
     """
     print("\n--- INICIANDO ETAPA DE [T]RANSFORMAÇÃO ---")
     
-    # 1. Preparar Dimensões
-    dim_local_clean = _preparar_dim_local(dim_local)
-    dim_tempo_anual = _preparar_dim_tempo(
-        dim_tempo, 
-        constantes['REGRA_TEMPO']['mes'],
-        constantes['REGRA_TEMPO']['dia']
+    # --- 1. Preparar Dimensões ---
+    print("Preparando dimensões (local e tempo)...")
+    
+    # 1.1. Preparar dim_local: Criar chave de 6 dígitos
+    # O SNIS usa 6 dígitos (sem DV), a dim_local tem 7 (com DV)
+    dim_local_clean = dim_local.copy()
+    dim_local_clean['cod_municipio_6dig'] = dim_local['cod_municipio'].astype(str).str[:-1].astype(int)
+
+    # 1.2. Preparar dim_tempo: Aplicar regra de negócio anual
+    # Esta Fato é anual, então só queremos os IDs de 1º de Janeiro de cada ano.
+    regra = REGRA_TEMPO_ANUAL
+    dim_tempo_anual = dim_tempo[
+        (dim_tempo['mes'] == regra['mes']) & (dim_tempo['dia'] == regra['dia'])
+    ].copy()
+    dim_tempo_anual = dim_tempo_anual[['id_tempo', 'ano']]
+    dim_tempo_anual['ano'] = dim_tempo_anual['ano'].astype(int)
+    print(f"Regra de tempo (anual) aplicada. {len(dim_tempo_anual)} chaves de ano encontradas.")
+
+    # --- 2. Ajustar e Filtrar Dados Brutos ---
+    print("Ajustando e filtrando dados brutos...")
+    df = df_bruto.copy()
+    
+    # 2.1. Criar chave de 6 dígitos nos dados brutos (para o merge)
+    df['id_municipio_6dig'] = df['id_municipio'].astype(str).str[:-1].astype(int)
+    
+    # 2.2. Filtrar por Ano (>= 2017)
+    df_filtrado_ano = df[df['ano'] >= ANO_FILTRO_INICIAL].copy()
+    
+    # 2.3. Filtrar por Município (só manter os que estão na nossa dim_local)
+    municipios_validos = dim_local_clean['cod_municipio_6dig'].unique()
+    df_filtrado = df_filtrado_ano[
+        df_filtrado_ano['id_municipio_6dig'].isin(municipios_validos)
+    ].copy()
+    print(f"Registos após filtros iniciais (ano e local): {len(df_filtrado)}")
+
+    # --- 3. Limpar Nulos ---
+    print("A tratar valores nulos (NaN -> 0) nas métricas...")
+    for col in COLUNAS_METRICAS_PARA_LIMPAR:
+        if col in df_filtrado.columns:
+            df_filtrado[col] = df_filtrado[col].fillna(0).astype(int)
+    
+    df_limpo = df_filtrado # Renomeia para clareza
+
+    # --- 4. Mapear Dimensões (Merge) ---
+    print("Mapeando dimensões (buscando Foreign Keys)...")
+    
+    # 4.1. Merge com Dim_Local (usando a chave de 6 dígitos)
+    df_com_local = pd.merge(
+        df_limpo,
+        dim_local_clean[['id_local', 'cod_municipio_6dig']],
+        left_on='id_municipio_6dig',
+        right_on='cod_municipio_6dig',
+        how='left' 
     )
     
-    # 2. Ajustar e Filtrar Dados Brutos
-    df_filtrado = _ajustar_e_filtrar_dados(
-        df_bruto, 
-        dim_local_clean, 
-        constantes['ANO_FILTRO']
+    # 4.2. Merge com Dim_Tempo (usando a chave 'ano')
+    df_com_local['ano'] = df_com_local['ano'].astype(int)
+    df_com_chaves = pd.merge(
+        df_com_local,
+        dim_tempo_anual,
+        on='ano', # Chave 'ano' existe em ambos
+        how='left'
     )
     
-    # 3. Limpar Nulos
-    df_limpo = _limpar_valores_nulos(
-        df_filtrado, 
-        constantes['COLUNAS_METRICAS']
-    )
+    # 4.3. Limpar dados que não encontraram chaves
+    df_final = df_com_chaves.dropna(subset=['id_local', 'id_tempo'])
+    print(f"Mapeamento de dimensões concluído. {len(df_final)} registos válidos.")
+
+    # --- 5. Finalizar Schema da Fato ---
+    # (Não é preciso agregar/groupby, os dados já estão no nível ano/município)
+    print("A renomear e selecionar colunas finais para a Fato...")
     
-    # 4. Mapear Dimensões (Merge)
-    df_com_chaves = _mapear_dimensoes(
-        df_limpo, 
-        dim_local_clean, 
-        dim_tempo_anual
-    )
-    
-    # 5. Finalizar Schema (Renomear e Selecionar)
-    # Nota: Este pipeline não precisa de agregação (GroupBy) porque
-    # os dados do SNIS já parecem estar por 'ano' e 'município'.
-    # Se precisássemos agregar, adicionaríamos um passo _agregar_dados_fato aqui.
-    fato_socioeconomico = _finalizar_schema_fato(
-        df_com_chaves,
-        constantes['RENAME_MAP'],
-        constantes['COLUNAS_FINAIS']
-    )
+    df_renomeado = df_final.rename(columns=COLUNAS_FATO_RENAME_MAP)
+    fato_socioeconomico = df_renomeado[COLUNAS_FATO_FINAL]
     
     print("--- [T]RANSFORMAÇÃO CONCLUÍDA ---")
     return fato_socioeconomico
@@ -326,15 +210,8 @@ def pipeline_transformacao(df_bruto, dim_local, dim_tempo, constantes):
 # ETAPA DE CARGA (LOAD)
 # =============================================================================
 
-def carregar_dados_processados(df, output_path):
-    """
-    Salva o DataFrame final (tabela Fato) em um arquivo CSV.
-    Esta é a etapa 'Load' do nosso pipeline E-T, persistindo o dado processado
-    para o próximo script (L) usar.
-
-    @param df (pd.DataFrame): O DataFrame final e agregado.
-    @param output_path (str): Caminho completo onde o CSV será salvo.
-    """
+def salvar_csv(df, output_path):
+    """Salva o DataFrame final (tabela Fato) em um arquivo CSV."""
     print("\n--- INICIANDO ETAPA DE [L]OAD (Salvando CSV) ---")
     
     if df is None or df.empty:
@@ -342,19 +219,14 @@ def carregar_dados_processados(df, output_path):
         return
 
     try:
-        # Garante que o diretório de saída existe
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        
-        # Salva o CSV final
-        df.to_csv(output_path, index=False, sep=';') # Mudei para sep=';'
+        df.to_csv(output_path, index=False, sep=';')
         
         print(f"\n--- SUCESSO! ---")
-        print(f"O DataFrame 'fato_socioeconomico_tratado' ({len(df)} linhas) foi salvo em:")
+        print(f"Arquivo 'fato_socioeconomico.csv' ({len(df)} linhas) salvo em:")
         print(output_path)
     except Exception as e:
-        print(f"\n--- ERRO AO SALVAR O CSV ---")
-        print(f"Não foi possível salvar o arquivo em: {output_path}")
-        print(f"Erro: {e}")
+        print(f"\n--- ERRO AO SALVAR O CSV: {e} ---")
         raise
 
 # =============================================================================
@@ -362,55 +234,44 @@ def carregar_dados_processados(df, output_path):
 # =============================================================================
 
 def main():
-    """
-    Função principal que orquestra todo o pipeline de E-T.
-    """
-    print("========= INICIANDO PIPELINE E-T: Fato_Socioeconomico =========")
+    """Função principal que orquestra todo o pipeline de E-T."""
+    print("========= INICIANDO PIPELINE ETL Socioeconomico =========")
     
-    # 0. Montar o Google Drive (apenas se estiver no Colab)
     mount_google_drive()
     
     # 1. ETAPA DE EXTRAÇÃO
-    df_bruto = extrair_dados_brutos(
-        CAMINHOS_ETL['bruto_snis'],
-        SCHEMA_SNIS_COLS
-    )
-    
+    try:
+        df_bruto = extrair_dados_brutos(
+            CAMINHOS_ETL['bruto_snis'],
+            SCHEMA_SNIS_COLS
+        )
+        dim_local = carregar_dimensao(
+            CAMINHOS_ETL['dim_local'],
+            SCHEMA_DIM_LOCAL_COLS
+        )
+        dim_tempo = carregar_dimensao(
+            CAMINHOS_ETL['dim_tempo'],
+            SCHEMA_DIM_TEMPO_COLS
+        )
+    except Exception as e:
+        print(f"ERRO na Extração. Pipeline interrompido: {e}")
+        return
+
     if df_bruto.empty:
         print("Pipeline interrompido: Nenhum dado bruto foi carregado.")
         return
-
-    dim_local = carregar_dimensao(
-        CAMINHOS_ETL['dim_local'],
-        SCHEMA_DIM_LOCAL_COLS
-    )
-    dim_tempo = carregar_dimensao(
-        CAMINHOS_ETL['dim_tempo'],
-        SCHEMA_DIM_TEMPO_COLS
-    )
     
     # 2. ETAPA DE TRANSFORMAÇÃO
-    # Junta todas as constantes de transformação em um dicionário
-    transform_constants = {
-        'ANO_FILTRO': ANO_FILTRO_INICIAL,
-        'COLUNAS_METRICAS': COLUNAS_METRICAS_PARA_LIMPAR,
-        'REGRA_TEMPO': REGRA_TEMPO_ANUAL,
-        'RENAME_MAP': COLUNAS_FATO_RENAME_MAP,
-        'COLUNAS_FINAIS': COLUNAS_FATO_FINAL
-    }
-    
-    fato_final = pipeline_transformacao(
+    fato_final = transformar_dados_socioeconomicos(
         df_bruto,
         dim_local,
-        dim_tempo,
-        transform_constants
+        dim_tempo
     )
     
     # 3. ETAPA DE CARGA (Salvar CSV)
-    carregar_dados_processados(fato_final, CAMINHOS_ETL['saida_fato_csv'])
+    salvar_csv(fato_final, CAMINHOS_ETL['saida_fato_csv'])
     
-    print("\n========= PIPELINE E-T Fato_Socioeconomico CONCLUÍDO =========")
-    print(f"O ficheiro {CAMINHOS_ETL['saida_fato_csv']} está pronto para o script de carga (LOAD).")
+    print("\n========= PIPELINE ETL Socioeconomico CONCLUÍDO =========")
 
 
 if __name__ == "__main__":

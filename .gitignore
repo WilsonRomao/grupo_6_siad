@@ -1,2 +1,4 @@
 dados/
 configs/
+.venv/
+__pycache__/
