@@ -24,7 +24,7 @@ PATH_PROCESSADOS = os.path.join(CAMINHO_BASE, 'processados')
 PATH_BRUTOS = os.path.join(CAMINHO_BASE, 'brutos')
 
 # Caminho de entrada do arquivo XLS do IBGE
-#Usamos o ficheiro de 2022 como fonte para os nomes e códigos das capitais
+#Usamos o arquivo de 2022 como fonte para os nomes e códigos das capitais
 
 PATH_BRUTOS_LOCAL = os.path.join(PATH_BRUTOS, 'local') 
 PATH_FONTE_LOCAL = os.path.join(PATH_BRUTOS_LOCAL, 'AR_BR_RG_UF_RGINT_MES_MIC_MUN_2022.xls')

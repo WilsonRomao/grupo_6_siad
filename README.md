@@ -29,7 +29,7 @@ Antes de executar, são necessárias duas configurações:
 
 ### A. Base de Dados
 
-1.  Crie um ficheiro de configuração em `configs/db_config.yml`.
+1.  Crie um arquivo de configuração em `configs/db_config.yml`.
 2.  Preencha-o com as suas credenciais do MySQL.
 
 **Exemplo (`configs/db_config.yml`):**

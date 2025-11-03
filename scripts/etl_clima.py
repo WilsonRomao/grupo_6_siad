@@ -1,6 +1,4 @@
 """
-Pipeline de ETL Simplificado para dados Meteorológicos (INMET)
-
 Este script executa o processo de ETL:
 1.  Carrega as dimensões 'local' e 'tempo'.
 2.  Varre a pasta de dados brutos e processa um arquivo de cada vez.
@@ -153,7 +151,7 @@ def extrair_dados_clima(file_path):
 
 def transformar_e_agregar_clima(df_raw, metadata_local, dim_tempo, dim_local):
     """
-    Função consolidada que limpa, transforma, enriquece e agrega os dados.
+    Função que limpa, transforma, enriquece e agrega os dados.
     Recebe os dados horários de UM arquivo e retorna os dados semanais.
     """
     if df_raw.empty:
@@ -227,7 +225,7 @@ def transformar_e_agregar_clima(df_raw, metadata_local, dim_tempo, dim_local):
         dim_tempo,
         left_on='Data',
         right_on='data_completa',
-        how='inner' # Só mantém dias que existem na dim_tempo
+        how='inner' 
     )
 
     # 2.3. AGREGAR (DIÁRIO -> SEMANAL)

@@ -19,7 +19,7 @@ import sys
 
 # 1. Importar todos os scripts como módulos
 # O "try-except" garante que o utilizador é notificado se
-# os ficheiros não estiverem na mesma pasta.
+# os arquivos não estiverem na mesma pasta.
 try:
     import create_tables
     import cria_dimensoes

@@ -1,10 +1,8 @@
-# -*- coding: utf-8 -*-
 """
-Script de Carga de Dados (Passo 2) - VERSÃO SIMPLIFICADA
-
-Este script usa uma única transação (All-or-Nothing) para:
+Script de Carga de Dados
+Este script usa uma transação para:
 1. Limpar (DELETE) todas as tabelas.
-2. Carregar (INSERT) todos os ficheiros CSV processados.
+2. Carregar (INSERT) todos os arquivos CSV processados.
 """
 
 import os
@@ -50,7 +48,7 @@ MODO_DE_CARGA = 'append'
 # =============================================================================
 
 def carregar_config_dw(path_yaml):
-    """Lê o ficheiro 'db_config.yml' e constrói a string de conexão."""
+    """Lê o arquivo 'db_config.yml' e constrói a string de conexão."""
     print(f"A ler configuração do DW de: {path_yaml}")
     try:
         with open(path_yaml, 'r') as f:
@@ -104,7 +102,7 @@ def carregar_csv_para_dw(conexao, caminho_csv: str, nome_tabela: str, modo_carga
         df = pd.read_csv(caminho_csv, sep=';')
         
         if df.empty:
-            print(f"AVISO: O ficheiro {caminho_csv} está vazio. A ignorar.")
+            print(f"AVISO: O arquivo {caminho_csv} está vazio. A ignorar.")
             return
 
         print(f"Lidas {len(df)} linhas de {os.path.basename(caminho_csv)}")
@@ -116,16 +114,16 @@ def carregar_csv_para_dw(conexao, caminho_csv: str, nome_tabela: str, modo_carga
             con=conexao,            # Passa a conexão da transação
             if_exists=modo_carga,   # 'append'
             index=False,
-            chunksize=1000          # Bom para tabelas grandes
+            chunksize=1000         
         )
         
         print(f"SUCESSO: Dados de {os.path.basename(caminho_csv)} carregados.")
 
     except FileNotFoundError:
-        print(f"ERRO: Ficheiro não encontrado: {caminho_csv}")
+        print(f"ERRO: arquivo não encontrado: {caminho_csv}")
         raise # Força o rollback da transação principal
     except pd.errors.EmptyDataError:
-        print(f"AVISO: O ficheiro {caminho_csv} está vazio. A ignorar.")
+        print(f"AVISO: O arquivo {caminho_csv} está vazio. A ignorar.")
     except Exception as e:
         print(f"ERRO ao carregar '{nome_tabela}': {e}")
         raise # Força o rollback da transação principal
@@ -136,7 +134,7 @@ def carregar_csv_para_dw(conexao, caminho_csv: str, nome_tabela: str, modo_carga
 
 def main():
     """Orquestra a carga de todos os CSVs para o DW numa transação ÚNICA."""
-    print("========= INICIANDO SCRIPT DE CARGA (Estratégia: Transação Única) =========")
+    print("========= INICIANDO SCRIPT DE CARGA =========")
             
     STRING_CONEXAO_DW = carregar_config_dw(PATH_CONFIG)
     
@@ -146,12 +144,7 @@ def main():
         
     try:
         engine = create_engine(STRING_CONEXAO_DW)        
-        
-        # --- ESTA É A MUDANÇA PRINCIPAL ---
-        # 'with engine.begin() as conexao:' inicia UMA transação.
-        # Se o bloco 'with' terminar sem erros, faz COMMIT automático.
-        # Se ocorrer qualquer erro (Exception), faz ROLLBACK automático.
-        
+                
         print("\nA iniciar transação 'All-or-Nothing'...")
         with engine.begin() as conexao:
             

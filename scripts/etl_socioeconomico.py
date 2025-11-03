@@ -6,8 +6,8 @@ VERSÃO ATUALIZADA (v4 - GitHub):
 - Carrega 3 fontes de dados brutos:
   1. SNIS (Água/Esgoto) - CSV
   2. IBGE População (Histórico) - CSV
-  3. IBGE Áreas Territoriais (Múltiplos ficheiros .XLS anuais)
-- Combina os ficheiros de área anuais num único DataFrame.
+  3. IBGE Áreas Territoriais (Múltiplos arquivos .XLS anuais)
+- Combina os arquivos de área anuais num único DataFrame.
 - Usa o código de município de 7 dígitos (IBGE) como chave.
 - Calcula a densidade demográfica.
 """
@@ -42,8 +42,8 @@ CAMINHOS_ETL = {
     'saida_fato_csv': os.path.join(PATH_PROCESSADOS, 'fato_socioeconomico.csv')
 }
 
-# --- Lista dos Ficheiros de Área (.XLS) ---
-MAPA_FICHEIROS_AREA = {
+# --- Lista dos arquivos de Área (.XLS) ---
+MAPA_arquivoS_AREA = {
     2017: {
         'path': os.path.join(PATH_BRUTOS_LOCAL, 'AR_BR_RG_UF_MES_MIC_MUN_2017.xls'),
         'sheet_name': 'AR_BR_MUN_2017',
@@ -133,22 +133,22 @@ def extrair_csv(file_path, usecols, sep=','):
         print(f"ERRO ao ler {file_path}: {e}")
         raise
 
-def _carregar_e_combinar_areas_historicas(mapa_ficheiros):
+def _carregar_e_combinar_areas_historicas(mapa_arquivos):
     """
-    Lê múltiplos ficheiros de área .XLS anuais, normaliza-os e 
+    Lê múltiplos arquivos de área .XLS anuais, normaliza-os e 
     combina-os num único DataFrame histórico (ano, id_municipio, area_km2).
     """
-    print("\nIniciando combinação dos ficheiros de área territorial (.xls)...")
+    print("\nIniciando combinação dos arquivos de área territorial (.xls)...")
     lista_dfs_area = []
     
-    for ano, info in mapa_ficheiros.items():
+    for ano, info in mapa_arquivos.items():
         try:
             path = info['path']
             sheet = info['sheet_name']
             col_id = info['col_id']
             col_area = info['col_area']
             
-            print(f"  A ler ficheiro de {ano} (Aba: {sheet})...")
+            print(f"  A ler arquivo de {ano} (Aba: {sheet})...")
             
             df_ano = pd.read_excel(
                 path,
@@ -166,13 +166,13 @@ def _carregar_e_combinar_areas_historicas(mapa_ficheiros):
             lista_dfs_area.append(df_ano)
             
         except FileNotFoundError:
-            print(f"  AVISO: Ficheiro de área de {ano} não encontrado em: {path}. A saltar este ano.")
+            print(f"  AVISO: arquivo de área de {ano} não encontrado em: {path}. A saltar este ano.")
         except Exception as e:
-            print(f"  AVISO: Erro ao ler o ficheiro de {ano} (Aba: {sheet}). Erro: {e}.")
+            print(f"  AVISO: Erro ao ler o arquivo de {ano} (Aba: {sheet}). Erro: {e}.")
             print("         Verifique se 'xlrd' está instalado (pip install xlrd) e se o nome da aba está correto.")
             
     if not lista_dfs_area:
-        print("ERRO: Nenhum ficheiro de área foi lido com sucesso.")
+        print("ERRO: Nenhum arquivo de área foi lido com sucesso.")
         raise FileNotFoundError("Nenhum dado de área territorial foi carregado.")
 
     df_area_historica = pd.concat(lista_dfs_area, ignore_index=True)
@@ -326,9 +326,7 @@ def salvar_csv(df, output_path):
 def main():
     """Função principal que orquestra todo o pipeline de E-T."""
     print("========= INICIANDO PIPELINE ETL Socioeconomico =========")
-    
-    # Chamada ao 'mount_google_drive' REMOVIDA
-    
+        
     # 1. ETAPA DE EXTRAÇÃO
     try:
         # Fatos Brutos (CSV)
@@ -342,7 +340,7 @@ def main():
         )
         
         # Fato Bruto (XLS Combinados)
-        df_area = _carregar_e_combinar_areas_historicas(MAPA_FICHEIROS_AREA)
+        df_area = _carregar_e_combinar_areas_historicas(MAPA_arquivoS_AREA)
         
         # Dimensões (CSV)
         dim_local = extrair_csv(
