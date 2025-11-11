@@ -6,8 +6,8 @@ services:
     container_name: dev_mysql
     environment:
       MYSQL_ROOT_PASSWORD: 123
-      MYSQL_USER: user_lbd
-      MYSQL_PASSWORD: pass_lbd
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
       MYSQL_DATABASE: default_schema
     ports:
       - 3310:3306
