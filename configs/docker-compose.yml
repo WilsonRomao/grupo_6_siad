@@ -1,0 +1,31 @@
+version: "3"
+# stack de serviços mysql + interface web
+services:
+  mysql:
+    image: mysql:latest
+    container_name: dev_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: 123
+      MYSQL_USER: user_lbd
+      MYSQL_PASSWORD: pass_lbd
+      MYSQL_DATABASE: default_schema
+    ports:
+      - 3310:3306
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: dev_pma
+    links:
+      - mysql
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      PMA_ARBITRARY: 1
+    restart: always
+    ports:
+      - 8183:80
+  adminer:
+    container_name: dev_adminer
+    image: adminer
+    restart: always
+    ports:
+      - 8182:8080
