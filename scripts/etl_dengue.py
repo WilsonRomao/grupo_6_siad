@@ -23,14 +23,14 @@ PATH_DIM_TEMPO = os.path.join(PATH_PROCESSADOS, 'dim_tempo.csv')
 PATH_SAIDA_FATO = os.path.join(PATH_PROCESSADOS, 'fato_casos_dengue.csv')
 
 COLUNAS_MASTER = [
-    "ID_AGRAVO", "CLASSI_FIN", "ID_MN_RESI", "SG_UF", "TPAUTOCTO",
+    "ID_AGRAVO", "CLASSI_FIN", "ID_MN_RESI", "SG_UF", 
     "DT_NASC", "ANO_NASC", "CS_SEXO", "HOSPITALIZ", "EVOLUCAO",
     "DT_NOTIFIC", "SEM_NOT", "NU_IDADE_N"
 ]
 DTYPES_MASTER = {col: 'str' for col in COLUNAS_MASTER}
 
 COLUNAS_POS_EXTRACAO = [
-    "DT_NOTIFIC", "ID_MN_RESI", "CS_SEXO", "HOSPITALIZ", "TPAUTOCTO",
+    "DT_NOTIFIC", "ID_MN_RESI", "CS_SEXO", "HOSPITALIZ",
     "CLASSI_FIN", "EVOLUCAO", "DT_NASC", "ANO_NASC"
 ]
 
@@ -38,7 +38,6 @@ FILLNA_MAP = {
     'HOSPITALIZ': '9', 
     'EVOLUCAO': '9',    
     'CLASSI_FIN': '9',  
-    'TPAUTOCTO': '3',   
     'CS_SEXO': 'I'      
 }
 
@@ -46,7 +45,6 @@ AGG_CRITERIA = {
     'CLASSI_FIN_EXCLUIR': ['2', '9'], 
     'EVOLUCAO_OBITO': '2', 
     'HOSPITALIZ_SIM': '1', 
-    'TPAUTOCTO_SIM': '1',  
     'SEXO_MASCULINO': 'M',
     'SEXO_FEMININO': 'F'
 }
@@ -54,7 +52,6 @@ AGG_CRITERIA = {
 AGG_RENAMING_MAP = {
     'flag_casos': 'num_casos',
     'flag_obitos': 'num_obitos',
-    'flag_autoctones': 'num_autoctones',
     'flag_masculino': 'num_masculino',
     'flag_feminino': 'num_feminino',
     'flag_criancas': 'num_criancas',
@@ -192,12 +189,10 @@ def transformar_dados(df_bruto, dim_local, dim_tempo):
     df['CLASSI_FIN'] = df['CLASSI_FIN'].astype(str)
     df['EVOLUCAO'] = df['EVOLUCAO'].astype(str)
     df['HOSPITALIZ'] = df['HOSPITALIZ'].astype(str)
-    df['TPAUTOCTO'] = df['TPAUTOCTO'].astype(str)
     
     df['flag_casos'] = np.where(df['CLASSI_FIN'].isin(AGG_CRITERIA['CLASSI_FIN_EXCLUIR']), 0, 1)
     df['flag_obitos'] = np.where(df['EVOLUCAO'] == AGG_CRITERIA['EVOLUCAO_OBITO'], 1, 0)
     df['flag_hospitalizacao'] = np.where(df['HOSPITALIZ'] == AGG_CRITERIA['HOSPITALIZ_SIM'], 1, 0)
-    df['flag_autoctones'] = np.where(df['TPAUTOCTO'] == AGG_CRITERIA['TPAUTOCTO_SIM'], 1, 0)
     df['flag_masculino'] = np.where(df['CS_SEXO'] == AGG_CRITERIA['SEXO_MASCULINO'], 1, 0)
     df['flag_feminino'] = np.where(df['CS_SEXO'] == AGG_CRITERIA['SEXO_FEMININO'], 1, 0)
     
