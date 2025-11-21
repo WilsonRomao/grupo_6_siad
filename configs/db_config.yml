@@ -1,6 +1,7 @@
 mysql:
-  host: "localhost"     # ou o IP do seu container/servidor
-  port: 3310
-  user: "root"
-  password: "123"
-  database: "dw_dengue"   # O banco de dados que será criado
+  host: localhost
+  port: 3306
+  user: root
+  password: h3r0lqvmmCC34710w%401%402%403ffb4F
+  database: dw_dengue
+

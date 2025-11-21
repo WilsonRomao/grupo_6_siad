@@ -1,3 +1,5 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 pandas
 numpy
 xlrd
@@ -7,3 +9,5 @@ cryptography
 PyYAML
 seaborn
 matplotlib
+PyQt6
+torch
