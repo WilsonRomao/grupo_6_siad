@@ -11,3 +11,4 @@ seaborn
 matplotlib
 PyQt6
 torch
+scikit-learn
