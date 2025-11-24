@@ -1,7 +1,9 @@
 """ 
 Esse script baseia-se em responder a questão 3: 
 
-Analisando as séries históricas de casos e de dados climáticos, é possível identificar um padrão que antecede os surtos de dengue? Quais combinações de fatores (ex: aumento de chuva e temperatura) historicamente indicam um maior risco de epidemia para um município nas semanas seguintes? Haverá dois scripts para essa pergunta: um que irá predizer os dados através das métricas de Machine Learning (Regressão Linear e SVR) e outro que irá predizer através de Redes Neurais Recorrentes (LSTM). Esse é o baseado no LSTM. 
+Analisando as séries históricas de casos e de dados climáticos, é possível identificar um padrão que antecede os surtos de dengue? Quais combinações de fatores (ex: aumento de chuva e temperatura) historicamente indicam um maior risco de epidemia para um município nas semanas seguintes? 
+
+A ideia do código abaixo tem como objetivo treinar os dados com utilização de uma rede neural recorrente, treinando-a com dados de casos de dengue, média de temperaturas e de chuva (precipitação) e gerar gráficos onde será possível observar como o treinamento comportar-se e realizar uma previsão de ocorrências futuras,
 
 """ 
 # =============================================================================
