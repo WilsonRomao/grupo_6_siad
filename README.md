@@ -102,3 +102,22 @@ O orquestrador irá executar todos os scripts na ordem:
 4.  **`etl_clima.py`**: Processa os dados de clima.
 5.  **`etl_socioeconomico.py`**: Processa os dados do SNIS.
 6.  **`load.py`**: Carrega todos os CSVs processados para o MySQL.
+
+## 4\. Após a execução dos scripts de ETL
+
+Após a execução dos scripts anteriores, o orquestrador deve executar:
+
+```bash
+python3 scripts/analise_descritiva_p1.py
+```
+em resposta a Questão 1 do Trabalho 9cidades com maior taxa e suas correlações)
+
+```bash
+python3 scripts/analise_descritiva_p2.py
+```
+em resposta a Questão 2 do Trabalho (Perfil demográfico mais vulnerável e sazionalidade)
+
+```bash
+python3 scripts/analise_lstm.py
+```
+em resposta a Questão 3 do trabalho (previsão de surtos de dengue em épocas futuras e sua correlação com temperatura e chuva).
